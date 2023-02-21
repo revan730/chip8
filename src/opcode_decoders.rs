@@ -97,6 +97,13 @@ lazy_static! {
             mask: 0xf00f,
             argument_decoders: vec![ArgumentDecoder{ mask: 0x0f00, shift: 8, kind: ArgumentType::Reg }, ArgumentDecoder{ mask: 0x0f0, shift: 4, kind: ArgumentType::Reg }],
         });
+        m.insert(Instructions::SubVxVy, OpcodeDecoder{
+            name: "SUB Vx, Vy",
+            instruction: Instructions::SubVxVy,
+            pattern: 0x8005,
+            mask: 0xf00f,
+            argument_decoders: vec![ArgumentDecoder{ mask: 0x0f00, shift: 8, kind: ArgumentType::Reg }, ArgumentDecoder{ mask: 0x0f0, shift: 4, kind: ArgumentType::Reg }],
+        });
         m.insert(Instructions::LdIAddr, OpcodeDecoder{
             name: "LD I, addr",
             instruction: Instructions::LdIAddr,
@@ -136,6 +143,13 @@ lazy_static! {
             name: "LD DT, Vx",
             instruction: Instructions::LdDtVx,
             pattern: 0xF015,
+            mask: 0xf0ff,
+            argument_decoders: vec![ArgumentDecoder{ mask: 0x0f00, shift: 8, kind: ArgumentType::Reg }],
+        });
+        m.insert(Instructions::LdStVx, OpcodeDecoder{
+            name: "LD ST, Vx",
+            instruction: Instructions::LdStVx,
+            pattern: 0xF018,
             mask: 0xf0ff,
             argument_decoders: vec![ArgumentDecoder{ mask: 0x0f00, shift: 8, kind: ArgumentType::Reg }],
         });

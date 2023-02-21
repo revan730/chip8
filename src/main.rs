@@ -9,16 +9,18 @@ mod cpu;
 mod instructions;
 mod opcode_decoders;
 mod drawable;
+mod audible;
 mod dummy_screen;
 mod sdl_screen;
+mod sdl_sound_device;
 mod font;
 mod constants;
 
 use cpu::Cpu;
 use font::FONT_TABLE;
-use sdl2::sys::SDL_GetRendererInfo;
-use sdl2::sys::SDL_HINT_RENDER_DRIVER;
-use sdl2::sys::SDL_SetHint;
+use sdl2::audio::AudioDevice;
+use sdl2::audio::AudioSpecDesired;
+use sdl_sound_device::SDLSoundDevice;
 use std::fs;
 use std::io;
 use std::env;
@@ -26,11 +28,11 @@ use std::process::{exit};
 
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
-use sdl2::pixels::Color;
 use std::time::Duration;
 
 use crate::constants::{SCREEN_WIDTH, SCREEN_HEIGHT};
 use crate::drawable::Drawable;
+use crate::audible::Audible;
 
 
 fn find_sdl_gl_driver() -> Option<u32> {
@@ -45,7 +47,7 @@ fn find_sdl_gl_driver() -> Option<u32> {
 fn main() {
     let args: Vec<String> = env::args().collect();
     println!("args: {:?}", args);
-    let rom_data = match load_file("roms/pong.ch8") {
+    let rom_data = match load_file(&args[1]) {
         Err(e) => {
             println!("Failed to read ROM: {:?}", e);
             exit(123)
@@ -74,8 +76,9 @@ fn main() {
     canvas.clear();
     canvas.present();
 
-
     let mut screen = Box::new(sdl_screen::SDLScreen::new(canvas)) as Box<dyn Drawable>;
+    let mut sdl_audio_device = create_audio_device(&sdl_context);
+    
 
     let mut event_pump = sdl_context.event_pump().unwrap();
     let mut cpu: Cpu = Cpu::new();
@@ -83,9 +86,12 @@ fn main() {
 
     let mut pressed_keys = [0 as u8; 16];
 
-    loop {
+    'running: loop {
         for event in event_pump.poll_iter() {
             match event {
+                Event::Quit { timestamp } => {
+                    break 'running;
+                },
                 Event::KeyDown { timestamp, window_id, keycode: Some(keycode), scancode, keymod, repeat } => {
                     match keycode {
                         Keycode::Num1 => pressed_keys[0x1] = 1,
@@ -132,9 +138,9 @@ fn main() {
             }
         }
 
-        cpu.tick();
-        cpu.step(&mut screen, &pressed_keys);
-        //println!("{:?}", cpu);
+        cpu.tick(&mut sdl_audio_device);
+        cpu.step(&mut screen, &mut sdl_audio_device, &pressed_keys);
+        println!("{:?}", cpu);
 
         screen.present();
 
@@ -167,4 +173,10 @@ fn fill_font_data(data: &mut [u8; 4096]) {
             i += 1;
         }
     }
+}
+
+fn create_audio_device(sdl_context: &sdl2::Sdl) -> Box<dyn Audible> {
+    let device = SDLSoundDevice::new(sdl_context);
+
+    Box::new(device) as Box<dyn Audible>
 }

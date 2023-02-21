@@ -1,3 +1,4 @@
+use crate::audible::Audible;
 use crate::constants::{SCREEN_WIDTH, SCREEN_HEIGHT};
 use crate::drawable::Drawable;
 use crate::instructions::Instructions;
@@ -58,14 +59,17 @@ impl Cpu {
         self.ram = rom;
     }
 
-    pub fn tick(&mut self) {
+    pub fn tick(&mut self, audio_device: &mut Box<dyn Audible>) {
         if self.dt > 0 {
             self.dt -= 1;
         }
 
         if self.st > 0 {
             self.st -= 1;
-            // TODO: Stop sound if st is now 0
+  
+            if self.st == 0 {
+                audio_device.disable_sound();
+            }
         }
     }
 
@@ -79,11 +83,11 @@ impl Cpu {
         self.sp = 0xff;
     }
 
-    pub fn step(&mut self, screen: &mut Box<dyn Drawable>, pressed_keys: &[u8; 16]) {
+    pub fn step(&mut self, screen: &mut Box<dyn Drawable>, audio_device: &mut Box<dyn Audible>, pressed_keys: &[u8; 16]) {
         let opcode = self.fetch();
         let instruction = self.decode(opcode);
 
-        self.execute(instruction, screen, pressed_keys);
+        self.execute(instruction, screen, audio_device, pressed_keys);
     }
 
     fn fetch(&self) -> u16 {
@@ -94,7 +98,7 @@ impl Cpu {
     }
 
     fn decode(&self, opcode: u16) -> Instruction {
-        //println!("opcode: {:#X}", opcode);
+        println!("opcode: {:#X}", opcode);
         for (_, decoder) in OPCODE_DECODERS.iter() {
             let masking_result = opcode & decoder.mask;
             if masking_result == decoder.pattern {
@@ -116,7 +120,7 @@ impl Cpu {
         panic!("Unknown instruction");
     }
 
-    fn execute(&mut self, instr: Instruction, screen: &mut Box<dyn Drawable>, pressed_keys: &[u8; 16]) {
+    fn execute(&mut self, instr: Instruction, screen: &mut Box<dyn Drawable>, audio_device: &mut Box<dyn Audible>, pressed_keys: &[u8; 16]) {
         //println!("Instruction {:?}", instr.int);
         match instr.int {
             Instructions::Ret => {
@@ -189,6 +193,18 @@ impl Cpu {
 
                 self.pc += 2;
             },
+            Instructions::SubVxVy => {
+                self.registers[0xf] = 0;
+
+                if self.registers[instr.args[0] as usize] > self.registers[instr.args[1] as usize] {
+                    self.registers[0xf] = 1;
+                }
+
+                let result = Wrapping(self.registers[instr.args[0] as usize]) - Wrapping(self.registers[instr.args[1] as usize]);
+                self.registers[instr.args[0] as usize] = result.0;
+
+                self.pc += 2;
+            },
             Instructions::LdIAddr => {
                 self.i = u16::from(instr.args[0]) << 8 | u16::from(instr.args[1]);
                 self.pc += 2;
@@ -239,6 +255,13 @@ impl Cpu {
             },
             Instructions::LdDtVx => {
                 self.dt = self.registers[instr.args[0] as usize];
+
+                self.pc += 2;
+            },
+            Instructions::LdStVx => {
+                self.st = self.registers[instr.args[0] as usize];
+
+                audio_device.enable_sound();
 
                 self.pc += 2;
             },
