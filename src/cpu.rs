@@ -94,7 +94,7 @@ impl Cpu {
     }
 
     fn decode(&self, opcode: u16) -> Instruction {
-        println!("opcode: {:#X}", opcode);
+        //println!("opcode: {:#X}", opcode);
         for (_, decoder) in OPCODE_DECODERS.iter() {
             let masking_result = opcode & decoder.mask;
             if masking_result == decoder.pattern {
@@ -117,7 +117,7 @@ impl Cpu {
     }
 
     fn execute(&mut self, instr: Instruction, screen: &mut Box<dyn Drawable>, pressed_keys: &[u8; 16]) {
-        println!("Instruction {:?}", instr.int);
+        //println!("Instruction {:?}", instr.int);
         match instr.int {
             Instructions::Ret => {
                 if self.sp > 0xf {

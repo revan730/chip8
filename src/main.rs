@@ -16,6 +16,9 @@ mod constants;
 
 use cpu::Cpu;
 use font::FONT_TABLE;
+use sdl2::sys::SDL_GetRendererInfo;
+use sdl2::sys::SDL_HINT_RENDER_DRIVER;
+use sdl2::sys::SDL_SetHint;
 use std::fs;
 use std::io;
 use std::env;
@@ -29,10 +32,20 @@ use std::time::Duration;
 use crate::constants::{SCREEN_WIDTH, SCREEN_HEIGHT};
 use crate::drawable::Drawable;
 
+
+fn find_sdl_gl_driver() -> Option<u32> {
+    for (index, item) in sdl2::render::drivers().enumerate() {
+        if item.name == "opengl" {
+            return Some(index as u32);
+        }
+    }
+    None
+}
+
 fn main() {
     let args: Vec<String> = env::args().collect();
     println!("args: {:?}", args);
-    let rom_data = match load_file(&args[1]) {
+    let rom_data = match load_file("roms/pong.ch8") {
         Err(e) => {
             println!("Failed to read ROM: {:?}", e);
             exit(123)
@@ -48,6 +61,7 @@ fn main() {
     let mut rom_correct_endianess = file_data_to_rom_layout(rom_data);
     fill_font_data(&mut rom_correct_endianess);
 
+
     let sdl_context = sdl2::init().unwrap();
     let video_subsystem = sdl_context.video().unwrap();
     let window = video_subsystem.window("CHIP-8", SCREEN_WIDTH as u32 * 20, SCREEN_HEIGHT as u32 * 20)
@@ -55,13 +69,13 @@ fn main() {
     .opengl()
     .build().unwrap();
 
-    let mut canvas = window.into_canvas().present_vsync().build().unwrap();
+    let mut canvas = window.into_canvas().index(find_sdl_gl_driver().unwrap()).present_vsync().build().unwrap();
     canvas.set_logical_size(SCREEN_WIDTH as u32, SCREEN_HEIGHT as u32).unwrap();
     canvas.clear();
     canvas.present();
 
-    let mut screen = Box::new(sdl_screen::SDLScreen::new(canvas)) as Box<dyn Drawable>;
 
+    let mut screen = Box::new(sdl_screen::SDLScreen::new(canvas)) as Box<dyn Drawable>;
 
     let mut event_pump = sdl_context.event_pump().unwrap();
     let mut cpu: Cpu = Cpu::new();
@@ -120,7 +134,7 @@ fn main() {
 
         cpu.tick();
         cpu.step(&mut screen, &pressed_keys);
-        println!("{:?}", cpu);
+        //println!("{:?}", cpu);
 
         screen.present();
 
