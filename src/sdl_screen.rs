@@ -1,10 +1,9 @@
-use std::cell::{RefCell, Ref};
+use std::cell::{RefCell};
 
 use crate::drawable::Drawable;
-use crate::constants::{SCREEN_WIDTH, SCREEN_HEIGHT};
+use crate::constants::{SCREEN_WIDTH, SCREEN_HEIGHT, PIXEL_COLOR};
 
 
-use sdl2::rect::Point;
 use sdl2::render::{Canvas, Texture};
 use sdl2::video::Window;
 use sdl2::pixels::Color;
@@ -12,7 +11,7 @@ use sdl2::pixels::Color;
 pub struct SDLScreen {
     canvas: Canvas<Window>,
     texture: RefCell<Texture<'static>>,
-    framebuffer: [[u8; SCREEN_HEIGHT]; SCREEN_WIDTH],
+    fb: [u32; SCREEN_HEIGHT * SCREEN_WIDTH],
     update_needed: bool,
 }
 
@@ -20,22 +19,22 @@ impl Drawable for SDLScreen {
     fn draw(&mut self, x: u8, y: u8, set: u8) -> bool {
         // Using preallocated texture we update it on each DRW opcode so we don't waste time on it
         // on actual GPU draw
-        let collision = self.framebuffer[x as usize][y as usize] & set;
-        self.framebuffer[x as usize][y as usize] ^= set;
+
+        let mut pixel_value: u32 = 0;
+        if set > 0 {
+            pixel_value = PIXEL_COLOR;
+        }
+
+        let collision = self.fb[(y as usize * SCREEN_WIDTH) + x as usize] & pixel_value;
+        self.fb[(y as usize * SCREEN_WIDTH) + x as usize] ^= pixel_value;
 
         let texture = self.texture.get_mut();
-        self.canvas.with_texture_canvas(texture, |texture_canvas| {
-            texture_canvas.set_draw_color(Color::RGB(0, 0, 0));
-            texture_canvas.clear();
-            texture_canvas.set_draw_color(Color::RGB(0, 255, 0));
-            for x in 0..SCREEN_WIDTH {
-                for y in 0..SCREEN_HEIGHT {
-                    if self.framebuffer[x][y] == 1 {
-                        texture_canvas.draw_point(Point::new(x as i32, y as i32));
-                    }
-                }
-            }
-        });
+
+        let raw_data = unsafe {
+            std::slice::from_raw_parts(self.fb.as_ptr() as *const u8, self.fb.len() * 4)
+        };
+
+        texture.update(None, raw_data, SCREEN_WIDTH * 4).unwrap();
 
         self.update_needed = true;
 
@@ -50,7 +49,7 @@ impl Drawable for SDLScreen {
 
     fn present(&mut self) {
         if self.update_needed {
-            self.canvas.copy(self.texture.get_mut(), None, None);
+            self.canvas.copy(self.texture.get_mut(), None, None).unwrap();
             self.canvas.present();
             self.update_needed = false;
         }
@@ -67,6 +66,6 @@ impl SDLScreen {
             std::mem::transmute::<_, Texture<'static>>(texture)
         };
 
-        SDLScreen { canvas, texture: RefCell::new(texture), framebuffer: [[0; SCREEN_HEIGHT]; SCREEN_WIDTH], update_needed: false }
+        SDLScreen { canvas, texture: RefCell::new(texture), fb: [0; SCREEN_HEIGHT * SCREEN_WIDTH], update_needed: false }
     }
 }

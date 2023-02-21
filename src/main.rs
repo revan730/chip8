@@ -85,6 +85,7 @@ fn main() {
     cpu.load_rom(rom_correct_endianess);
 
     let mut pressed_keys = [0 as u8; 16];
+    let mut counter: u64 = 0;
 
     'running: loop {
         for event in event_pump.poll_iter() {
@@ -138,13 +139,17 @@ fn main() {
             }
         }
 
-        cpu.tick(&mut sdl_audio_device);
+        if counter % 8 == 0 {
+            cpu.tick(&mut sdl_audio_device);
+        }
+
         cpu.step(&mut screen, &mut sdl_audio_device, &pressed_keys);
         println!("{:?}", cpu);
 
         screen.present();
 
-        ::std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 60));
+        ::std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 480));
+        counter += 1;
     }
 }
 
