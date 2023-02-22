@@ -6,7 +6,6 @@ use crate::constants::{SCREEN_WIDTH, SCREEN_HEIGHT, PIXEL_COLOR};
 
 use sdl2::render::{Canvas, Texture};
 use sdl2::video::Window;
-use sdl2::pixels::Color;
 
 pub struct SDLScreen {
     canvas: Canvas<Window>,
@@ -43,8 +42,16 @@ impl Drawable for SDLScreen {
     }
 
     fn cls(&mut self) {
-        self.canvas.set_draw_color(Color::RGB(0, 0, 0));
-        self.canvas.clear();
+        self.fb.iter_mut().for_each(|m| *m = 0);
+        let texture = self.texture.get_mut();
+
+        let raw_data = unsafe {
+            std::slice::from_raw_parts(self.fb.as_ptr() as *const u8, self.fb.len() * 4)
+        };
+
+        texture.update(None, raw_data, SCREEN_WIDTH * 4).unwrap();
+
+        self.update_needed = true;
     }
 
     fn present(&mut self) {

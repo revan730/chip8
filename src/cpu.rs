@@ -31,7 +31,7 @@ impl fmt::Debug for Cpu {
             write!(f, "Last stack addr: {:#X}\n", self.stack[self.sp as usize]).unwrap();
         }
 
-        write!(f, "SP: {}\n", self.sp)
+        write!(f, "SP: {} PC: {:#X}\n", self.sp, self.pc)
     }
 }
 
@@ -83,11 +83,11 @@ impl Cpu {
         self.sp = 0xff;
     }
 
-    pub fn step(&mut self, screen: &mut Box<dyn Drawable>, audio_device: &mut Box<dyn Audible>, pressed_keys: &[u8; 16]) {
+    pub fn step(&mut self, screen: &mut Box<dyn Drawable>, audio_device: &mut Box<dyn Audible>, pressed_keys: &[u8; 16], last_key: &mut u8) {
         let opcode = self.fetch();
         let instruction = self.decode(opcode);
 
-        self.execute(instruction, screen, audio_device, pressed_keys);
+        self.execute(instruction, screen, audio_device, pressed_keys, last_key);
     }
 
     fn fetch(&self) -> u16 {
@@ -98,14 +98,11 @@ impl Cpu {
     }
 
     fn decode(&self, opcode: u16) -> Instruction {
-        println!("opcode: {:#X}", opcode);
         for (_, decoder) in OPCODE_DECODERS.iter() {
             let masking_result = opcode & decoder.mask;
             if masking_result == decoder.pattern {
-                //println!("Got {} instruction", decoder.name);
                 let args: Vec<u8> = decoder.argument_decoders.iter().map(|arg_decoder| {
                     let arg: u8 = ((opcode & arg_decoder.mask) >> arg_decoder.shift) as u8;
-                    //println!("Arg with mask {:#X} and shift {}", arg_decoder.mask, arg_decoder.shift);
 
                     arg
                 }).collect();
@@ -120,9 +117,12 @@ impl Cpu {
         panic!("Unknown instruction");
     }
 
-    fn execute(&mut self, instr: Instruction, screen: &mut Box<dyn Drawable>, audio_device: &mut Box<dyn Audible>, pressed_keys: &[u8; 16]) {
-        //println!("Instruction {:?}", instr.int);
+    fn execute(&mut self, instr: Instruction, screen: &mut Box<dyn Drawable>, audio_device: &mut Box<dyn Audible>, pressed_keys: &[u8; 16], last_key: &mut u8) {
         match instr.int {
+            Instructions::Cls => {
+                screen.cls();
+                self.pc += 2;
+            },
             Instructions::Ret => {
                 if self.sp > 0xf {
                     panic!("Trying to return with empty stack");
@@ -163,6 +163,13 @@ impl Cpu {
                     self.pc += 2;
                 }
             },
+            Instructions::SeVxVy => {
+                if self.registers[instr.args[0] as usize] == self.registers[instr.args[1] as usize] {
+                    self.pc += 4;
+                } else {
+                    self.pc += 2;
+                }
+            },
             Instructions::LdVxByte => {
                 self.registers[instr.args[0] as usize] = instr.args[1];
                 self.pc += 2;
@@ -177,8 +184,16 @@ impl Cpu {
                 self.registers[instr.args[0] as usize] = self.registers[instr.args[1] as usize];
                 self.pc += 2;
             },
+            Instructions::OrVxVy => {
+                self.registers[instr.args[0] as usize] |= self.registers[instr.args[1] as usize];
+                self.pc += 2;
+            },
             Instructions::AndVxVy => {
                 self.registers[instr.args[0] as usize] &= self.registers[instr.args[1] as usize];
+                self.pc += 2;
+            },
+            Instructions::XorVxVy => {
+                self.registers[instr.args[0] as usize] ^= self.registers[instr.args[1] as usize];
                 self.pc += 2;
             },
             Instructions::AddVxVy => {
@@ -205,9 +220,46 @@ impl Cpu {
 
                 self.pc += 2;
             },
+            Instructions::ShrVxVy => {
+                let lsb_vy = self.registers[instr.args[0] as usize] & 1;
+                self.registers[0xf] = lsb_vy;
+                self.registers[instr.args[0] as usize] >>= 1;
+
+                self.pc += 2;
+            },
+            Instructions::SubnVxVy => {
+                self.registers[0xf] = 0;
+
+                if self.registers[instr.args[1] as usize] > self.registers[instr.args[0] as usize] {
+                    self.registers[0xf] = 1;
+                }
+
+                let result = Wrapping(self.registers[instr.args[1] as usize]) - Wrapping(self.registers[instr.args[0] as usize]);
+                self.registers[instr.args[0] as usize] = result.0;
+
+                self.pc += 2;
+            },
+            Instructions::ShlVxVy => {
+                let msb_vy = self.registers[instr.args[0] as usize] >> 7;
+                self.registers[0xf] = msb_vy;
+                self.registers[instr.args[0] as usize] <<= 1;
+
+                self.pc += 2;
+            },
+            Instructions::SneVxVy => {
+                if self.registers[instr.args[0] as usize] != self.registers[instr.args[1] as usize] {
+                    self.pc += 4;
+                } else {
+                    self.pc += 2;
+                }
+            },
             Instructions::LdIAddr => {
                 self.i = u16::from(instr.args[0]) << 8 | u16::from(instr.args[1]);
                 self.pc += 2;
+            },
+            Instructions::JpV0Addr => {
+                self.pc = u16::from(instr.args[0]) << 8 | u16::from(instr.args[1]);
+                self.pc += u16::from(self.registers[0x0]);
             },
             Instructions::RndVxByte => {
                 let mut rng = rand::thread_rng();
@@ -215,6 +267,14 @@ impl Cpu {
                 self.registers[instr.args[0] as usize] = rnd_value;
 
                 self.pc += 2;
+            },
+            Instructions::SkpVx => {
+                let key_hex = self.registers[instr.args[0] as usize];
+                if pressed_keys[key_hex as usize] == 1 {
+                    self.pc += 4;
+                } else {
+                    self.pc += 2;
+                }
             },
             Instructions::SknpVx => {
                 let key_hex = self.registers[instr.args[0] as usize];
@@ -253,6 +313,13 @@ impl Cpu {
 
                 self.pc += 2;
             },
+            Instructions::LdVxK => {
+                if *last_key != 255 {
+                    self.registers[instr.args[0] as usize] = *last_key;
+                    self.pc += 2;
+                    *last_key = 255;
+                }
+            },
             Instructions::LdDtVx => {
                 self.dt = self.registers[instr.args[0] as usize];
 
@@ -262,6 +329,11 @@ impl Cpu {
                 self.st = self.registers[instr.args[0] as usize];
 
                 audio_device.enable_sound();
+
+                self.pc += 2;
+            },
+            Instructions::AddIVx => {
+                self.i = self.i + u16::from(self.registers[instr.args[0] as usize]);
 
                 self.pc += 2;
             },
@@ -285,9 +357,17 @@ impl Cpu {
 
                 self.pc += 2;
             },
+            Instructions::LdIVx => {
+                let last_reg = instr.args[0] as usize;
+                for x in 0..last_reg + 1 {
+                    self.ram[self.i as usize + x] = self.registers[x];
+                }
+
+                self.pc += 2;
+            },
             Instructions::LdVxI => {
                 let last_reg = instr.args[0] as usize;
-                for x in 0..last_reg {
+                for x in 0..last_reg + 1 {
                     self.registers[x] = self.ram[self.i as usize + x];
                 }
 

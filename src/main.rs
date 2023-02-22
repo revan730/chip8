@@ -18,8 +18,6 @@ mod constants;
 
 use cpu::Cpu;
 use font::FONT_TABLE;
-use sdl2::audio::AudioDevice;
-use sdl2::audio::AudioSpecDesired;
 use sdl_sound_device::SDLSoundDevice;
 use std::fs;
 use std::io;
@@ -46,7 +44,7 @@ fn find_sdl_gl_driver() -> Option<u32> {
 
 fn main() {
     let args: Vec<String> = env::args().collect();
-    println!("args: {:?}", args);
+
     let rom_data = match load_file(&args[1]) {
         Err(e) => {
             println!("Failed to read ROM: {:?}", e);
@@ -85,36 +83,43 @@ fn main() {
     cpu.load_rom(rom_correct_endianess);
 
     let mut pressed_keys = [0 as u8; 16];
+    let mut last_key: u8 = 255;
     let mut counter: u64 = 0;
 
     'running: loop {
         for event in event_pump.poll_iter() {
             match event {
-                Event::Quit { timestamp } => {
+                Event::Quit { .. } => {
                     break 'running;
                 },
-                Event::KeyDown { timestamp, window_id, keycode: Some(keycode), scancode, keymod, repeat } => {
+                Event::KeyDown { keycode: Some(keycode),.. } => {
+                    let mut index: usize = 255;
                     match keycode {
-                        Keycode::Num1 => pressed_keys[0x1] = 1,
-                        Keycode::Num2 => pressed_keys[0x2] = 1,
-                        Keycode::Num3 => pressed_keys[0x3] = 1,
-                        Keycode::Num4 => pressed_keys[0xC] = 1,
-                        Keycode::Q => pressed_keys[0x4] = 1,
-                        Keycode::W => pressed_keys[0x5] = 1,
-                        Keycode::E => pressed_keys[0x6] = 1,
-                        Keycode::R => pressed_keys[0xD] = 1,
-                        Keycode::A => pressed_keys[0x7] = 1,
-                        Keycode::S => pressed_keys[0x8] = 1,
-                        Keycode::D => pressed_keys[0x9] = 1,
-                        Keycode::F => pressed_keys[0xE] = 1,
-                        Keycode::Z => pressed_keys[0xA] = 1,
-                        Keycode::X => pressed_keys[0x0] = 1,
-                        Keycode::C => pressed_keys[0xB] = 1,
-                        Keycode::V => pressed_keys[0xF] = 1,
+                        Keycode::Num1 => index = 0x1,
+                        Keycode::Num2 => index = 0x2,
+                        Keycode::Num3 => index = 0x3,
+                        Keycode::Num4 => index = 0xC,
+                        Keycode::Q => index = 0x4,
+                        Keycode::W => index = 0x5,
+                        Keycode::E => index = 0x6,
+                        Keycode::R => index = 0xD,
+                        Keycode::A => index = 0x7,
+                        Keycode::S => index = 0x8,
+                        Keycode::D => index = 0x9,
+                        Keycode::F => index = 0xE,
+                        Keycode::Z => index = 0xA,
+                        Keycode::X => index = 0x0,
+                        Keycode::C => index = 0xB,
+                        Keycode::V => index = 0xF,
                         _ => {},
                     };
+
+                    if index < pressed_keys.len() {
+                        pressed_keys[index] = 1;
+                        last_key = index as u8;
+                    }
                 },
-                Event::KeyUp { timestamp, window_id, keycode: Some(keycode), scancode, keymod, repeat } => {
+                Event::KeyUp { keycode: Some(keycode), .. } => {
                     match keycode {
                         Keycode::Num1 => pressed_keys[0x1] = 0,
                         Keycode::Num2 => pressed_keys[0x2] = 0,
@@ -134,6 +139,8 @@ fn main() {
                         Keycode::V => pressed_keys[0xF] = 0,
                         _ => {},
                     };
+
+                    last_key = 255;
                 },
                 _ => {}
             }
@@ -143,13 +150,12 @@ fn main() {
             cpu.tick(&mut sdl_audio_device);
         }
 
-        cpu.step(&mut screen, &mut sdl_audio_device, &pressed_keys);
-        println!("{:?}", cpu);
+        cpu.step(&mut screen, &mut sdl_audio_device, &pressed_keys, &mut last_key);
 
         screen.present();
 
-        ::std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 480));
         counter += 1;
+        ::std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 480));
     }
 }
 
@@ -160,7 +166,7 @@ fn load_file(path: &str) -> io::Result<Vec<u8>> {
 
 fn file_data_to_rom_layout(data: Vec<u8>) -> [u8; 4096] {
     let mut resulting_array: [u8;4096] = [0;4096];
-    let mut array_pos = 512; // First 512 bytes are reserved
+    let mut array_pos = 512; // First 512 bytes are reserved for interpreter (font data, interpreter code on real hardware etc.)
 
     for byte in data.into_iter() {
         resulting_array[array_pos] = byte;

@@ -1,6 +1,6 @@
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Instructions {
-    Sys,
+    Sys, // Unused on interpreters
     Cls,
     Ret,
     Jp,
