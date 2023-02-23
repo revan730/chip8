@@ -20,18 +20,18 @@ pub struct Cpu {
 
 impl fmt::Debug for Cpu {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Registers:\n").unwrap();
+        writeln!(f, "Registers:").unwrap();
         for (i, reg) in self.registers.iter().enumerate() {
-            write!(f, "V{:X}: {:#X}\n", i, reg).unwrap();
+            writeln!(f, "V{i:X}: {reg:#X}").unwrap();
         }
-        write!(f, "DT: {:#X} ST: {:#X}\n", self.dt, self.st).unwrap();
-        write!(f, "I: {:#X}\n", self.i).unwrap();
+        writeln!(f, "DT: {:#X} ST: {:#X}", self.dt, self.st).unwrap();
+        writeln!(f, "I: {:#X}", self.i).unwrap();
 
         if self.sp < 17 {
-            write!(f, "Last stack addr: {:#X}\n", self.stack[self.sp as usize]).unwrap();
+            writeln!(f, "Last stack addr: {:#X}", self.stack[self.sp as usize]).unwrap();
         }
 
-        write!(f, "SP: {} PC: {:#X}\n", self.sp, self.pc)
+        writeln!(f, "SP: {} PC: {:#X}", self.sp, self.pc)
     }
 }
 
@@ -92,7 +92,7 @@ impl Cpu {
 
     fn fetch(&self) -> u16 {
         match self.pc {
-            0..=4096 => return u16::from(self.ram[self.pc as usize]) << 8 | u16::from(self.ram[self.pc as usize + 1]),
+            0..=4096 => u16::from(self.ram[self.pc as usize]) << 8 | u16::from(self.ram[self.pc as usize + 1]),
             _ => panic!("PC address out of ram bounds"),
         }
     }
@@ -300,7 +300,7 @@ impl Cpu {
                         let y = (self.registers[instr.args[1] as usize] + i) % SCREEN_HEIGHT as u8;
 
                         let set_vf = screen.draw(x, y, value);
-                        if set_vf == true {
+                        if set_vf {
                             self.registers[0xf] = 1;
                         }
                     }
@@ -333,7 +333,7 @@ impl Cpu {
                 self.pc += 2;
             },
             Instructions::AddIVx => {
-                self.i = self.i + u16::from(self.registers[instr.args[0] as usize]);
+                self.i += u16::from(self.registers[instr.args[0] as usize]);
 
                 self.pc += 2;
             },
@@ -346,9 +346,9 @@ impl Cpu {
                 let mut x = self.registers[instr.args[0] as usize];
 
                 let a = x.div_floor(100);
-                x = x - a * 100;
+                x -= a * 100;
                 let b = x.div_floor(10);
-                x = x - b * 10;
+                x -= b * 10;
                 let c = x;
 
                 self.ram[self.i as usize] = a;
@@ -359,7 +359,7 @@ impl Cpu {
             },
             Instructions::LdIVx => {
                 let last_reg = instr.args[0] as usize;
-                for x in 0..last_reg + 1 {
+                for x in 0..=last_reg {
                     self.ram[self.i as usize + x] = self.registers[x];
                 }
 
@@ -367,7 +367,7 @@ impl Cpu {
             },
             Instructions::LdVxI => {
                 let last_reg = instr.args[0] as usize;
-                for x in 0..last_reg + 1 {
+                for x in 0..=last_reg {
                     self.registers[x] = self.ram[self.i as usize + x];
                 }
 

@@ -10,7 +10,6 @@ mod instructions;
 mod opcode_decoders;
 mod drawable;
 mod audible;
-mod dummy_screen;
 mod sdl_screen;
 mod sdl_sound_device;
 mod font;
@@ -47,7 +46,7 @@ fn main() {
 
     let rom_data = match load_file(&args[1]) {
         Err(e) => {
-            println!("Failed to read ROM: {:?}", e);
+            println!("Failed to read ROM: {e:?}");
             exit(123)
         },
         Ok(data) => data,
@@ -82,7 +81,7 @@ fn main() {
     let mut cpu: Cpu = Cpu::new();
     cpu.load_rom(rom_correct_endianess);
 
-    let mut pressed_keys = [0 as u8; 16];
+    let mut pressed_keys = [0; 16];
     let mut last_key: u8 = 255;
     let mut counter: u64 = 0;
 
@@ -168,7 +167,7 @@ fn file_data_to_rom_layout(data: Vec<u8>) -> [u8; 4096] {
     let mut resulting_array: [u8;4096] = [0;4096];
     let mut array_pos = 512; // First 512 bytes are reserved for interpreter (font data, interpreter code on real hardware etc.)
 
-    for byte in data.into_iter() {
+    for byte in data {
         resulting_array[array_pos] = byte;
         array_pos += 1;
     }
@@ -178,8 +177,8 @@ fn file_data_to_rom_layout(data: Vec<u8>) -> [u8; 4096] {
 
 fn fill_font_data(data: &mut [u8; 4096]) {
     let mut i = 0;
-    for character in FONT_TABLE.into_iter() {
-        for byte in character.into_iter() {
+    for character in FONT_TABLE {
+        for byte in character {
             data[i] = *byte;
             i += 1;
         }
